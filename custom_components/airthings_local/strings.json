@@ -20,11 +20,10 @@
     "step": {
       "init": {
         "title": "Automatic history backfill",
-        "description": "Configure automatic import of recent Airthings readings into Home Assistant history.",
+        "description": "Choose how often automatic backfill runs. The lookback period is automatically set to one hour longer than the interval.",
         "data": {
           "auto_backfill": "Enable automatic backfill",
-          "backfill_interval_hours": "Run backfill every",
-          "backfill_lookback_hours": "Import readings from the last (hours)"
+          "backfill_interval_hours": "Backfill interval"
         }
       }
     }

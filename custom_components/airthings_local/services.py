@@ -7,8 +7,8 @@ import voluptuous as vol
 from homeassistant.core import HomeAssistant, ServiceCall
 
 from .const import (
-    CONF_BACKFILL_LOOKBACK_HOURS,
-    DEFAULT_BACKFILL_LOOKBACK_HOURS,
+    CONF_BACKFILL_INTERVAL_HOURS,
+    DEFAULT_BACKFILL_INTERVAL_HOURS,
     DOMAIN,
 )
 from .history import async_import_device_history
@@ -54,17 +54,20 @@ async def async_setup_services(hass: HomeAssistant) -> None:
             for entry_id, coordinator in coordinators.items():
                 entry = hass.config_entries.async_get_entry(entry_id)
 
-                hours = call.data.get(
-                    "hours",
-                    (
+                interval_hours = (
+                    int(
                         entry.options.get(
-                            CONF_BACKFILL_LOOKBACK_HOURS,
-                            DEFAULT_BACKFILL_LOOKBACK_HOURS,
+                            CONF_BACKFILL_INTERVAL_HOURS,
+                            DEFAULT_BACKFILL_INTERVAL_HOURS,
                         )
-                        if entry
-                        else DEFAULT_BACKFILL_LOOKBACK_HOURS
-                    ),
+                    )
+                    if entry
+                    else DEFAULT_BACKFILL_INTERVAL_HOURS
                 )
+
+                default_hours = interval_hours + 1
+
+                hours = call.data.get("hours", default_hours)
 
                 result = await async_backfill_entity_history(
                     hass,

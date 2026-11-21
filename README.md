@@ -98,17 +98,40 @@ hours: 240
 
 Automatic backfill can be configured through the integration's **Configure** options.
 
-| Option | Default | Description |
-|---|---:|---|
-| Enable automatic backfill | Enabled | Turns scheduled backfill on or off |
-| Backfill interval | 6 hours | How often a backfill runs |
-| Lookback period | 7 hours | How far back each run retrieves readings |
+Only one timing setting is required: the backfill interval. The integration automatically sets the lookback period to one hour longer than the interval.
 
-The default 7-hour lookback with a 6-hour interval provides a 1-hour overlap between runs. Checkpointing prevents previously imported timestamps from being imported again.
+| Backfill interval | Automatic lookback |
+|---:|---:|
+| 1 hour | 2 hours |
+| 2 hours | 3 hours |
+| 3 hours | 4 hours |
+| 6 hours | 7 hours |
+| 12 hours | 13 hours |
+| 24 hours | 25 hours |
+
+The default configuration is:
+
+- Automatic backfill: Enabled
+- Backfill interval: 6 hours
+- Lookback period: 7 hours
+
+The additional hour provides an overlap between scheduled runs. Checkpointing prevents previously imported timestamps from being imported again.
 
 The first scheduled backfill runs after the configured interval, not immediately when Home Assistant starts.
 
-Manual backfills can still be run when automatic backfill is disabled.
+Manual backfills can still be run independently, with an optional `hours` parameter to override the default lookback.
+
+For example:
+
+```yaml
+# Use the configured interval + 1 hour
+{}
+
+# Override the lookback with 10 days
+hours: 240
+```
+
+Automatic backfill can be disabled without affecting manual backfill actions.
 
 ### Backfill Implementation and Safety
 

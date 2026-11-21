@@ -13,10 +13,8 @@ from homeassistant.helpers.event import async_track_time_interval
 from .const import (
     CONF_AUTO_BACKFILL,
     CONF_BACKFILL_INTERVAL_HOURS,
-    CONF_BACKFILL_LOOKBACK_HOURS,
     DEFAULT_AUTO_BACKFILL,
     DEFAULT_BACKFILL_INTERVAL_HOURS,
-    DEFAULT_BACKFILL_LOOKBACK_HOURS,
     DOMAIN,
 )
 from .coordinator import AirthingsCoordinator
@@ -43,33 +41,34 @@ async def async_setup_entry(
         ) from err
 
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
+
     entry.async_on_unload(
         entry.add_update_listener(async_reload_entry)
     )
 
     await async_setup_services(hass)
 
-    # Set up the recurring backfill if enabled.
     auto_backfill = entry.options.get(
         CONF_AUTO_BACKFILL,
         DEFAULT_AUTO_BACKFILL,
     )
 
     if auto_backfill:
-        interval_hours = entry.options.get(
-            CONF_BACKFILL_INTERVAL_HOURS,
-            DEFAULT_BACKFILL_INTERVAL_HOURS,
+        interval_hours = int(
+            entry.options.get(
+                CONF_BACKFILL_INTERVAL_HOURS,
+                DEFAULT_BACKFILL_INTERVAL_HOURS,
+            )
         )
 
-        lookback_hours = entry.options.get(
-            CONF_BACKFILL_LOOKBACK_HOURS,
-            DEFAULT_BACKFILL_LOOKBACK_HOURS,
-        )
+        lookback_hours = interval_hours + 1
 
         async def run_scheduled_backfill(now) -> None:
             _LOGGER.info(
-                "Starting scheduled Airthings %s-hour backfill",
+                "Starting scheduled Airthings %s-hour backfill "
+                "(%s-hour interval)",
                 lookback_hours,
+                interval_hours,
             )
 
             try:
