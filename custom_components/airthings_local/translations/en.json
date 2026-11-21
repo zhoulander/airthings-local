@@ -1,0 +1,31 @@
+{
+  "services": {
+    "import_history": {
+      "name": "Import historical statistics",
+      "description": "Imports hourly statistics derived from the stored five-minute Airthings readings. Existing hours are updated."
+    },
+    "backfill_entity_history": {
+      "name": "Backfill recent entity history",
+      "description": "Replays the most recent 30 days of five-minute samples into the existing sensor entities using their original timestamps. Requires Recorder retention of at least 30 days."
+    }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to Airthings Local",
+        "description": "Enter the base URL of your Airthings API, for example http://192.168.1.50:8000.",
+        "data": {
+          "url": "API URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect to the API or no enabled devices were found.",
+      "unknown": "Unexpected error. Check the Home Assistant logs."
+    },
+    "abort": {
+      "already_configured": "This Airthings API is already configured.",
+      "cannot_connect": "The discovered API could not be reached."
+    }
+  }
+}

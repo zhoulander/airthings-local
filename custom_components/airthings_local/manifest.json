@@ -1,0 +1,19 @@
+{
+  "domain": "airthings_local",
+  "name": "Airthings Local",
+  "codeowners": ["@zhoulander"],
+  "config_flow": true,
+  "documentation": "https://github.com/zhoulander/airthings-local",
+  "iot_class": "local_polling",
+  "loggers": [
+    "custom_components.airthings_local"
+  ],
+  "requirements": [],
+  "version": "0.4.0",
+  "zeroconf": [
+    {
+      "type": "_airthings-api._tcp.local.",
+      "name": "*"
+    }
+  ]
+}

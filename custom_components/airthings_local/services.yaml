@@ -1,0 +1,10 @@
+{
+  "import_history": {
+    "name": "Import historical statistics",
+    "description": "Imports hourly statistics derived from the stored five-minute Airthings readings. Existing hours are updated."
+  },
+  "backfill_entity_history": {
+    "name": "Backfill recent entity history",
+    "description": "Replays the most recent 30 days of five-minute samples into the existing sensor entities using their original timestamps. Requires Recorder retention of at least 30 days."
+  }
+}

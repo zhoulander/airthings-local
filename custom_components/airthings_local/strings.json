@@ -1,0 +1,32 @@
+
+{
+  "config": {
+    "step": {
+      "user": {
+        "data": {
+          "url": "Airthings API URL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to the Airthings API",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "cannot_connect": "Unable to connect to the Airthings API"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Automatic history backfill",
+        "description": "Configure automatic import of recent Airthings readings into Home Assistant history.",
+        "data": {
+          "auto_backfill": "Enable automatic backfill",
+          "backfill_interval_hours": "Run backfill every",
+          "backfill_lookback_hours": "Import readings from the last (hours)"
+        }
+      }
+    }
+  }
+}
