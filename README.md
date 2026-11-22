@@ -1,65 +1,105 @@
 # Airthings Local
 
-A Home Assistant custom integration for a locally hosted Airthings history API. Home Assistant never connects to Airthings devices over Bluetooth; your existing Python collector remains responsible for BLE communication and the API.
+A Home Assistant custom integration for a locally hosted Airthings history API.
+
+Home Assistant never communicates directly with Airthings devices over Bluetooth. Your existing Python collector remains responsible for BLE communication, collecting readings, and making historical data available through the API.
 
 ## Features
 
-- UI config flow and optional mDNS/Zeroconf discovery.
-- Discovers enabled Airthings devices from `/api/devices`.
+- UI-based configuration with optional mDNS/Zeroconf discovery.
+- Discovers enabled Airthings devices through the local API.
 - Polls each device's latest sample every five minutes.
-- Creates temperature, humidity, pressure, illuminance, VOC, CO2 and radon sensors where applicable.
-- Preserves measurement timestamps as entity attributes.
-- Provides a historical statistics import service, aggregating five-minute source records into completed UTC hours.
-- Provides a resumable, paginated entity-history backfill that writes source samples to existing sensor entities with their original timestamps.
-- Supports automatic entity-history backfill on a configurable schedule.
-- Supports configurable backfill frequency and lookback period.
+- Creates applicable environmental sensors for temperature, humidity, pressure, illuminance, VOC, CO₂, and radon.
+- Preserves source measurement timestamps as entity attributes.
+- Imports five-minute source records into completed hourly statistics.
+- Backfills existing sensor entities with historical samples using their original timestamps.
+- Supports scheduled automatic backfill with a configurable interval and an automatically calculated lookback period (interval + one hour).
+
+## Companion Project: Airthings Decoder
+
+**Airthings Decoder** is the companion BLE collection and decoding project currently in development.
+
+It communicates directly with Airthings devices, collects and decodes their readings, and makes the data available through the local API consumed by Airthings Local.
+
+Together, the projects provide a fully local data pipeline:
+
+**Airthings devices → Airthings Decoder → Local API → Airthings Local → Home Assistant**
+
+The goal is a local, subscription-free solution for bringing Airthings data into Home Assistant.
+
+Repository: *Coming soon.*
 
 ## Requirements
 
-The existing Airthings API must expose:
+- A running instance of **Airthings Decoder**, which provides the local API used by this integration.
+- Airthings Decoder must be configured and running before adding Airthings Local to Home Assistant.
 
-- `GET /health`
-- `GET /api/devices` returning a JSON object with a `devices` array.
-- `GET /api/devices/{serial}/history?limit=1&order=desc`
-- `GET /api/devices/{serial}/history` supporting pagination with `limit`, `offset`, and `order` parameters.
+See the [Airthings Decoder](https://github.com/zhoulander/airthings-decoder) documentation for installation, configuration, and API requirements.
 
-History responses must include a `records` array, per-sample `timestamp` (Unix seconds), and `next_offset` when another page exists. The API must support `order=asc` and `order=desc`.
+## Installation
 
-## Install on Home Assistant 2026.11+
+### Home Assistant Marketplace
 
-Home Assistant 2026.11 includes the built-in **Marketplace**, which replaces the separately installed HACS integration. After you create the public repository [https://github.com/zhoulander/airthings-local](https://github.com/zhoulander/airthings-local) and push these files:
+Home Assistant 2026.11+ includes the built-in Marketplace, which replaces the need to install HACS separately.
 
-1. In Home Assistant, open **Settings → Marketplace**.
+This repository is available at:
+
+[https://github.com/zhoulander/airthings-local](https://github.com/zhoulander/airthings-local)
+
+To install:
+
+1. Open **Settings → Marketplace** in Home Assistant.
 2. Choose **Add from link**.
-3. Enter `https://github.com/zhoulander/airthings-local` and add it.
-4. Open the repository entry and choose **Install**.
-5. When installation finishes, follow the setup prompt or go to **Settings → Devices & services → Add integration → Airthings Local**.
+3. Enter the repository URL above.
+4. Add the repository.
+5. Open its entry and choose **Install**.
+6. Restart Home Assistant if prompted.
+7. Go to **Settings → Devices & services → Add integration** and search for **Airthings Local**.
 
-The Marketplace requires a public GitHub repository with a root-level `hacs.json`. This repository includes that file. Adding a custom repository requires connecting a GitHub account from Home Assistant; that connection is read-only and separate from your GitHub login in a browser.
+The Marketplace requires a public GitHub repository with a root-level `hacs.json`, which this repository includes.
 
-For manual installation, copy `custom_components/airthings_local` into the Home Assistant configuration's `custom_components` directory and restart.
+Adding a custom repository requires connecting a GitHub account from Home Assistant. That connection is read-only and separate from your GitHub login in a browser.
 
-## Configure
+## Configuration
 
-Enter the API base URL, for example `http://192.168.1.50:8000`. Home Assistant must be able to reach that address on your LAN.
+Add the integration through **Settings → Devices & services → Add integration → Airthings Local**.
+
+Enter the base URL of your Airthings API, for example:
+
+`http://192.168.1.50:8000`
+
+Home Assistant must be able to reach that address over your local network.
 
 ## Historical Statistics Import
 
-After setup, run the `airthings_local.import_history` action from **Developer Tools → Actions**.
+The `airthings_local.import_history` action imports historical readings and creates hourly external statistics.
 
-The importer fetches stored source records and creates hourly external statistics for completed UTC hours with at least six readings in that hour. The original five-minute records remain untouched in the Airthings API.
+To run it:
 
-You can run the import again; Home Assistant updates existing statistic rows for matching hours. The first import may take some time for a large history. Do not run multiple imports simultaneously.
+1. Open **Developer Tools → Actions**.
+2. Select `airthings_local.import_history`.
+3. Run the action.
+
+The importer:
+
+- Fetches stored source records from the Airthings API.
+- Aggregates five-minute readings into completed UTC hours.
+- Creates hourly statistics for hours containing at least six readings.
+- Leaves the original five-minute records untouched in the Airthings API.
+
+You can run the import again. Home Assistant updates existing statistic rows for matching hours.
+
+The first import may take some time when a large history is available. Do not run multiple imports simultaneously.
 
 ## Entity History Backfill
 
 The `airthings_local.backfill_entity_history` action imports historical sensor readings from the local Airthings history API into Home Assistant Recorder.
 
-Unlike the long-term statistics importer, this backfill creates timestamped entity state history, allowing readings to appear in the normal Home Assistant History interface.
+Unlike the historical statistics importer, this backfill creates timestamped entity states. Readings therefore appear in the normal Home Assistant History interface.
 
-### Running a Manual Backfill
+### Manual Backfill
 
-Go to **Developer Tools → Actions** and select:
+Open **Developer Tools → Actions** and select:
 
 `airthings_local.backfill_entity_history`
 
@@ -69,7 +109,7 @@ Provide the number of hours to import:
 hours: 240
 ```
 
-The `hours` parameter is optional. If omitted, the integration uses the configured lookback period (7 hours by default).
+The `hours` parameter is optional. If omitted, the integration uses the configured lookback period, which defaults to seven hours.
 
 | Setting | Value |
 |---|---:|
@@ -96,9 +136,14 @@ hours: 240
 
 ### Automatic Backfill
 
-Automatic backfill can be configured through the integration's **Configure** options.
+Automatic backfill is configured through the integration's **Configure** options.
 
-Only one timing setting is required: the backfill interval. The integration automatically sets the lookback period to one hour longer than the interval.
+The available settings are:
+
+- **Enable automatic backfill:** Turns scheduled backfill on or off.
+- **Backfill interval:** Determines how frequently automatic backfill runs.
+
+The lookback period is automatically calculated as one hour longer than the configured interval.
 
 | Backfill interval | Automatic lookback |
 |---:|---:|
@@ -109,29 +154,29 @@ Only one timing setting is required: the backfill interval. The integration auto
 | 12 hours | 13 hours |
 | 24 hours | 25 hours |
 
-The default configuration is:
+Default configuration:
 
 - Automatic backfill: Enabled
 - Backfill interval: 6 hours
 - Lookback period: 7 hours
 
-The additional hour provides an overlap between scheduled runs. Checkpointing prevents previously imported timestamps from being imported again.
+The additional hour provides an overlap between scheduled runs, helping account for differences in polling and backfill timing. Checkpointing prevents previously imported timestamps from being imported again.
 
 The first scheduled backfill runs after the configured interval, not immediately when Home Assistant starts.
 
-Manual backfills can still be run independently, with an optional `hours` parameter to override the default lookback.
+Manual backfills remain available independently of automatic backfill. An optional `hours` parameter can override the configured lookback period.
 
-For example:
+Examples:
 
 ```yaml
-# Use the configured interval + 1 hour
+# Use the configured lookback period
 {}
 
 # Override the lookback with 10 days
 hours: 240
 ```
 
-Automatic backfill can be disabled without affecting manual backfill actions.
+Disabling automatic backfill does not disable manual backfill actions.
 
 ### Backfill Implementation and Safety
 
@@ -141,7 +186,7 @@ Automatic backfill can be disabled without affecting manual backfill actions.
 - A maximum of 5,000 records per device is enforced as a safety limit.
 - Progress is checkpointed separately for each requested lookback window, allowing interrupted runs to resume.
 - Existing entity IDs are used, including entities that have been renamed in Home Assistant.
-- Original live sensor states are restored after the backfill completes.
+- Original live sensor states are restored after backfill completes.
 - A coordinator lock prevents overlapping backfill operations.
 
 Do not run multiple manual backfills simultaneously.
@@ -162,7 +207,9 @@ Longer backfills can take considerable time. Start with a shorter window when te
 
 ## Network Discovery (Optional mDNS)
 
-The integration listens for `_airthings-api._tcp.local.`.
+The integration listens for:
+
+`_airthings-api._tcp.local.`
 
 To advertise the API, install `zeroconf` in the Python environment running the API and start:
 
@@ -170,22 +217,34 @@ To advertise the API, install `zeroconf` in the Python environment running the A
 tools/airthings_api_mdns.py --port 8000
 ```
 
-Keep that helper running while the API is available. The announcement advertises only the API endpoint; it does not connect to BLE.
+Keep that helper running while the API is available.
+
+The announcement advertises only the API endpoint. It does not establish a BLE connection or communicate directly with Airthings devices.
 
 URL-based setup remains available if you do not use mDNS.
 
 ## Sensors
 
-- **Wave Mini (model ID 2920):** temperature, humidity, pressure, illuminance, VOC.
-- **Wave Plus (model ID 2930):** temperature, humidity, pressure, illuminance, VOC, CO2, short-term radon, long-term radon.
+The integration creates sensors according to the connected device model.
+
+| Device | Model ID | Available sensors |
+|---|---:|---|
+| Wave Mini | 2920 | Temperature, humidity, pressure, illuminance, VOC |
+| Wave Plus | 2930 | Temperature, humidity, pressure, illuminance, VOC, CO2, short-term radon, long-term radon |
+
+Additional notes:
+
 - `x3` and `x4` are not exposed because their units and meaning are not confirmed.
-- Radon values are represented as Bq/m³.
-- VOC is represented as ppb; CO2 is represented as ppm.
+- Radon values are represented in Bq/m³.
+- VOC is represented in ppb.
+- CO2 is represented in ppm.
 
 ## Development Status
 
-This is an early community integration draft.
+Version 0.5.0 is an early community integration release.
 
 The integration has been tested in a Home Assistant instance, including a successful 10-day entity-history backfill importing 30,473 states with no skipped values.
 
-Backfill is bounded and paginated to reduce load on Home Assistant and Recorder. Backups are still recommended before installation or large historical imports.
+Backfill is bounded and paginated to reduce load on Home Assistant and Recorder.
+
+Backups are recommended before installation or large historical imports.

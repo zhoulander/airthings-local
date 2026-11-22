@@ -1,3 +1,4 @@
+
 {
   "services": {
     "import_history": {
@@ -26,6 +27,18 @@
     "abort": {
       "already_configured": "This Airthings API is already configured.",
       "cannot_connect": "The discovered API could not be reached."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Automatic history backfill",
+        "description": "Choose how often automatic backfill runs. The lookback period is automatically set to one hour longer than the interval.",
+        "data": {
+          "auto_backfill": "Enable automatic backfill",
+          "backfill_interval_hours": "Backfill interval"
+        }
+      }
     }
   }
 }

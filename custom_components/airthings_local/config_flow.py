@@ -1,7 +1,6 @@
 
 from __future__ import annotations
 
-import logging
 from urllib.parse import urlparse
 
 import voluptuous as vol
@@ -19,8 +18,6 @@ from .const import (
     DEFAULT_BACKFILL_INTERVAL_HOURS,
     DOMAIN,
 )
-
-_LOGGER = logging.getLogger(__name__)
 
 
 class AirthingsLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -89,21 +86,21 @@ class AirthingsLocalConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     def async_get_options_flow(config_entry):
-        return AirthingsLocalOptionsFlow(config_entry)
+        return AirthingsLocalOptionsFlow()
 
 
 class AirthingsLocalOptionsFlow(config_entries.OptionsFlow):
-    def __init__(self, config_entry):
-        self.config_entry = config_entry
-
     async def async_step_init(self, user_input=None):
+        options = self.config_entry.options or {}
+
         if user_input is not None:
+            user_input[CONF_BACKFILL_INTERVAL_HOURS] = int(
+                user_input[CONF_BACKFILL_INTERVAL_HOURS]
+            )
             return self.async_create_entry(
                 title="",
                 data=user_input,
             )
-
-        options = self.config_entry.options
 
         schema = vol.Schema(
             {
@@ -114,22 +111,23 @@ class AirthingsLocalOptionsFlow(config_entries.OptionsFlow):
                         DEFAULT_AUTO_BACKFILL,
                     ),
                 ): selector.BooleanSelector(),
-
                 vol.Optional(
                     CONF_BACKFILL_INTERVAL_HOURS,
-                    default=options.get(
-                        CONF_BACKFILL_INTERVAL_HOURS,
-                        DEFAULT_BACKFILL_INTERVAL_HOURS,
+                    default=str(
+                        options.get(
+                            CONF_BACKFILL_INTERVAL_HOURS,
+                            DEFAULT_BACKFILL_INTERVAL_HOURS,
+                        )
                     ),
                 ): selector.SelectSelector(
                     selector.SelectSelectorConfig(
                         options=[
-                            {"value": 1, "label": "1 hour"},
-                            {"value": 2, "label": "2 hours"},
-                            {"value": 3, "label": "3 hours"},
-                            {"value": 6, "label": "6 hours"},
-                            {"value": 12, "label": "12 hours"},
-                            {"value": 24, "label": "24 hours"},
+                            {"value": "1", "label": "1 hour"},
+                            {"value": "2", "label": "2 hours"},
+                            {"value": "3", "label": "3 hours"},
+                            {"value": "6", "label": "6 hours"},
+                            {"value": "12", "label": "12 hours"},
+                            {"value": "24", "label": "24 hours"},
                         ],
                         mode=selector.SelectSelectorMode.DROPDOWN,
                     )
