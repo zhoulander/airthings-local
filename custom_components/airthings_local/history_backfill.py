@@ -1,5 +1,10 @@
 
 from __future__ import annotations
+from functools import partial
+
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder import statistics as recorder_statistics
+from homeassistant.components.recorder.db_schema import StatisticsShortTerm
 
 import asyncio
 import logging
@@ -34,6 +39,87 @@ def _valid_number(value: Any) -> bool:
         and math.isfinite(float(value))
     )
 
+STATISTICS_INTERVAL_SECONDS = 300
+
+
+def _build_short_term_statistics(
+    records: list[dict[str, Any]],
+    key: str,
+    first_bucket: int,
+    last_bucket: int,
+) -> list[dict[str, Any]]:
+    """Build Home Assistant-compatible five-minute measurement statistics."""
+
+    # Keep the latest valid value for each timestamp.
+    point_map: dict[float, float] = {}
+
+    for record in records:
+        timestamp = record.get("timestamp")
+        value = record.get(key)
+
+        if not _valid_number(timestamp) or not _valid_number(value):
+            continue
+
+        point_map[float(timestamp)] = float(value)
+
+    points = sorted(point_map.items())
+
+    if not points:
+        return []
+
+    result = []
+    index = 0
+    previous_value = None
+
+    for bucket_start in range(
+        first_bucket,
+        last_bucket,
+        STATISTICS_INTERVAL_SECONDS,
+    ):
+        bucket_end = bucket_start + STATISTICS_INTERVAL_SECONDS
+
+        # Find the latest reading at or before this interval's start.
+        while index < len(points) and points[index][0] <= bucket_start:
+            previous_value = points[index][1]
+            index += 1
+
+        # Without a known starting value, we cannot calculate a complete
+        # five-minute interval.
+        if previous_value is None:
+            continue
+
+        cursor = float(bucket_start)
+        weighted_total = 0.0
+        interval_values = [previous_value]
+
+        # Apply each reading until the end of this interval.
+        while index < len(points) and points[index][0] < bucket_end:
+            timestamp, value = points[index]
+
+            weighted_total += previous_value * (timestamp - cursor)
+
+            cursor = timestamp
+            previous_value = value
+            interval_values.append(value)
+
+            index += 1
+
+        # The last reading remains in effect until the interval ends.
+        weighted_total += previous_value * (bucket_end - cursor)
+
+        result.append(
+            {
+                "start": datetime.fromtimestamp(
+                    bucket_start,
+                    timezone.utc,
+                ),
+                "mean": weighted_total / STATISTICS_INTERVAL_SECONDS,
+                "min": min(interval_values),
+                "max": max(interval_values),
+            }
+        )
+
+    return result
 
 def _sample_attributes(
     base: dict[str, Any],
@@ -121,17 +207,37 @@ async def _fetch_recent_history(
 
         await asyncio.sleep(0)
 
-    collected = [
+    collected.sort(
+        key=lambda record: float(record["timestamp"])
+    )
+
+    older_records = [
+        record
+        for record in collected
+        if float(record["timestamp"]) < cutoff
+    ]
+
+    recent_records = [
         record
         for record in collected
         if float(record["timestamp"]) >= cutoff
     ]
 
-    collected.sort(
-        key=lambda record: float(record["timestamp"])
+    # Retain one reading before the requested window to seed the first
+    # five-minute statistics interval.
+    seed_record = (
+        max(
+            older_records,
+            key=lambda record: float(record["timestamp"]),
+        )
+        if older_records
+        else None
     )
 
-    return collected
+    if seed_record is not None:
+        return [seed_record, *recent_records]
+
+    return recent_records
 
 
 async def async_backfill_entity_history(
@@ -186,6 +292,31 @@ async def async_backfill_entity_history(
             _LOGGER.warning("No enabled Airthings sensor entities found")
             return {"imported": 0, "skipped": 0}
 
+        statistic_ids = {
+            entity_id
+            for entities in entity_map.values()
+            for entity_id in entities.values()
+        }
+
+        statistics_metadata = {}
+        recorder_instance = None
+
+        try:
+            statistics_metadata = await hass.async_add_executor_job(
+                partial(
+                    recorder_statistics.get_metadata,
+                    hass,
+                    statistic_ids=statistic_ids,
+                )
+            )
+
+            recorder_instance = get_instance(hass)
+
+        except Exception:
+            _LOGGER.exception(
+                "Could not prepare Airthings short-term statistics import"
+            )
+
         store = Store(
             hass,
             1,
@@ -203,10 +334,18 @@ async def async_backfill_entity_history(
             else {}
         )
 
-        cutoff = (
-            datetime.now(timezone.utc)
-            - timedelta(hours=hours)
-        ).timestamp()
+        backfill_now = time.time()
+        cutoff = backfill_now - timedelta(hours=hours).total_seconds()
+
+        first_bucket = (
+            math.ceil(cutoff / STATISTICS_INTERVAL_SECONDS)
+            * STATISTICS_INTERVAL_SECONDS
+        )
+
+        last_bucket = (
+            int(backfill_now // STATISTICS_INTERVAL_SECONDS)
+            * STATISTICS_INTERVAL_SECONDS
+        )
 
         _LOGGER.info(
             "Starting Airthings entity-history backfill for the last %s hours",
@@ -215,6 +354,8 @@ async def async_backfill_entity_history(
 
         imported = 0
         skipped = 0
+        statistics_imported = 0
+        statistics_skipped = 0
 
         try:
             for device in coordinator.devices:
@@ -238,7 +379,10 @@ async def async_backfill_entity_history(
                 for record in records:
                     sample_ts = float(record["timestamp"])
 
-                    if sample_ts > time.time() + 60:
+                    if sample_ts < cutoff:
+                        continue
+
+                    if sample_ts > backfill_now + 60:
                         skipped += 1
                         continue
 
@@ -269,6 +413,57 @@ async def async_backfill_entity_history(
 
                     await store.async_save(checkpoints)
                     await asyncio.sleep(PAUSE_BETWEEN_RECORDS)
+
+                # Import five-minute short-term statistics.
+                if recorder_instance is not None:
+                    for key, entity_id in entities.items():
+                        metadata_entry = statistics_metadata.get(entity_id)
+
+                        if metadata_entry is None:
+                            statistics_skipped += 1
+
+                            _LOGGER.warning(
+                                "No Recorder statistics metadata found for %s",
+                                entity_id,
+                            )
+                            continue
+
+                        statistics = _build_short_term_statistics(
+                            records,
+                            key,
+                            first_bucket,
+                            last_bucket,
+                        )
+
+                        if not statistics:
+                            statistics_skipped += 1
+                            continue
+
+                        try:
+                            recorder_instance.async_import_statistics(
+                                metadata_entry[1],
+                                statistics,
+                                StatisticsShortTerm,
+                            )
+
+                            statistics_imported += len(statistics)
+
+                            _LOGGER.info(
+                                "Airthings statistics for %s: "
+                                "queued %s five-minute periods",
+                                entity_id,
+                                len(statistics),
+                            )
+
+                        except Exception:
+                            statistics_skipped += 1
+
+                            _LOGGER.exception(
+                                "Could not import five-minute statistics for %s",
+                                entity_id,
+                            )
+                else:
+                    statistics_skipped += len(entities)
 
                 _LOGGER.info(
                     "Airthings backfill for %s: imported %s states",
@@ -321,10 +516,18 @@ async def async_backfill_entity_history(
 
         _LOGGER.info(
             "Airthings entity-history backfill complete for %s hours: "
-            "imported %s states, skipped %s values",
+            "imported %s states, skipped %s values, "
+            "queued %s five-minute statistics, skipped %s sensors",
             hours,
             imported,
             skipped,
+            statistics_imported,
+            statistics_skipped,
         )
 
-        return {"imported": imported, "skipped": skipped}
+        return {
+            "imported": imported,
+            "skipped": skipped,
+            "statistics_imported": statistics_imported,
+            "statistics_skipped": statistics_skipped,
+        }

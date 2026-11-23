@@ -9,7 +9,7 @@
     "custom_components.airthings_local"
   ],
   "requirements": [],
-  "version": "0.5.0",
+  "version": "0.6.0",
   "zeroconf": [
     {
       "type": "_airthings-api._tcp.local.",
