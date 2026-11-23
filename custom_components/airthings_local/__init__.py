@@ -110,7 +110,7 @@ async def async_setup_entry(
             lookback_hours,
         )
     else:
-        _LOGGER.info("Automatic Airthings backfill is disabled")
+        _LOGGER.warning("Automatic Airthings backfill is disabled")
 
     await hass.config_entries.async_forward_entry_setups(
         entry,
